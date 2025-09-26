@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salvation Breakers背包解法計算器</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }
+        .main-row { display: flex; gap: 20px; margin-bottom: 20px; }
+        #grid { 
+            display: grid; 
+            grid-template-columns: repeat(9, 30px); 
+            grid-template-rows: repeat(9, 30px); 
+            gap: 1px; 
+            background: #ccc; 
+            padding: 0; 
+            margin: 0;
+            border: 2px solid #000;
+            user-select: none;
+            width: 280px;
+            height: 280px;
+        }
+        .cell { 
+            width: 30px; 
+            height: 30px; 
+            background: white; 
+            border: 1px solid #ddd;
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 12px;
+        }
+        .cell.blocked { background: #ff4444 !important; } /* 紅色：阻塞 */
+        .shapes { background: white; padding: 10px; border: 1px solid #ccc; width: fit-content; display: flex; flex-direction: column; align-items: flex-start; }
+        .shapes-row { display: flex; gap: 50px; }
+        .shapes-column { display: flex; flex-direction: column; }
+        .shapes label { display: block; margin: 5px 0; }
+        .shapes input[type="number"] { width: 50px; margin-left: 10px; }
+        .color-square { display: inline-block; width: 20px; height: 20px; margin-right: 5px; border: 1px solid #000; vertical-align: middle; }
+        button { margin: 10px 5px; padding: 10px; font-size: 16px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #solution { padding: 10px; border: 1px solid #ccc; min-height: 50px; background: white; width: 800px; }
+        h1, h2 { color: #333; }
+        .controls { margin: 10px 0; }
+        .title-row { display: flex; align-items: center; gap: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Salvation Breakers背包解法計算器</h1>
+    <p>點擊格子或按住左鍵拖動以改變格子狀態，紅色為未解鎖。<br>
+	選擇道具和數量後，按「計算解法」以計算放置方式。<br>
+	按「全部解鎖」解鎖所有格子，按「恢復預設」回到初始背包狀態，兩者均會清空所有已放置道具。<br><br>
+	最大嘗試次數預設為五百萬次，可自行更改嘗試次數。按「預設嘗試次數」回復至五百萬次。<br>
+	次數越多越有機會計算出解法，但亦會花費更多時間。<br><br>
+	道具種類越多，計算所需時間越多。<br>
+	建議不填入金幣（1格）的數量，如果有空位，解法生成後自行放入空位則可。
+	</p>
+    
+    <div class="controls">
+        <label>最大嘗試次數: <input type="number" id="maxTriesInput" value="5000000" min="1"> <button onclick="resetMaxTries()">預設嘗試次數</button></label>
+    </div>
+    
+    <button onclick="unlockAll()">全部解鎖</button>
+    <button onclick="restoreDefault()">恢復預設</button>
+    
+    <div class="main-row">
+        <div id="grid"></div>
+        
+        <div class="shapes" id="shapes">
+        </div>
+    </div>
+    
+    <button onclick="solve()" id="btn_solve">計算解法</button>
+    
+    <div id="solution"></div>
+
+    <script>
+        const shapes = [
+            { name: '金幣', pattern: [[1]] },
+            { name: '勳章', pattern: [[1], [1]] },
+            { name: '消音器/興奮劑', pattern: [[1], [1], [1]] },
+            { name: '尖刺路障/瞄準鏡', pattern: [[1, 1, 1]] },
+            { name: '手榴彈/工具組', pattern: [[1, 1], [1, 1]] },
+            { name: '手槍/槍托', pattern: [[1, 1], [1, 0]] },
+            { name: '衝鋒槍/霰彈槍', pattern: [[1, 1, 1], [1, 0, 0]] },
+            { name: '突擊步槍', pattern: [[1, 1, 1, 1], [0, 1, 0, 0]] },
+            { name: '狙擊步槍', pattern: [[1, 0], [1, 0], [1, 0], [1, 1]] },
+            { name: '雷射炮', pattern: [[0, 0, 0, 1], [1, 1, 1, 1]] },
+            { name: '噴火槍', pattern: [[0, 1], [0, 1], [1, 1], [0, 1]] }
+        ];
+
+        shapes.forEach((shape, i) => {
+            shape.color = `hsl(${i * 30}, 70%, 50%)`;
+        });
+
+        let grid = Array.from({ length: 9 }, () => Array(9).fill(0)); // 0: 解鎖, -1: 堯鎖, >0: 形狀ID
+        let placedShapes = []; // [{id, pattern, sr, sc, color}]
+        let shapeCounter = 0;
+        let isDragging = false;
+        let paintMode = 0; // -1 for block, 0 for empty
+        let tries = 0; // tries counter
+
+        // 預設背包形狀
+        const defaultGrid = [
+            [-1,-1,-1,-1,-1,-1,-1,-1,-1],
+            [-1,-1,-1,-1,-1,-1,-1,-1,-1],
+            [-1,-1,-1,0,0,0,-1,-1,-1],
+            [-1,-1,-1,0,0,0,-1,-1,-1],
+            [-1,-1,-1,0,0,0,-1,-1,-1],
+            [-1,-1,-1,0,0,0,-1,-1,-1],
+            [-1,-1,-1,0,0,0,-1,-1,-1],
+            [-1,-1,-1,-1,-1,-1,-1,-1,-1],
+            [-1,-1,-1,-1,-1,-1,-1,-1,-1]
+        ];
+
+        function initGrid() {
+            grid = defaultGrid.map(row => [...row]);
+            const gridDiv = document.getElementById('grid');
+            gridDiv.innerHTML = '';
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    cell.addEventListener('mousedown', (e) => handleMouseDown(r, c, e));
+                    cell.addEventListener('mousemove', (e) => handleMouseMove(r, c, e));
+                    gridDiv.appendChild(cell);
+                }
+            }
+            document.addEventListener('mouseup', handleMouseUp);
+            updateGrid();
+        }
+
+        function handleMouseDown(r, c, e) {
+            e.preventDefault();
+            const val = grid[r][c];
+            if (val > 0) {
+                removeShape(val);
+                return;
+            } else if (val === 0 || val === -1) {
+                paintMode = (val === 0) ? -1 : 0;
+                applyPaint(r, c);
+                isDragging = true;
+            }
+        }
+
+        function handleMouseMove(r, c, e) {
+            if (isDragging && (grid[r][c] === 0 || grid[r][c] === -1)) {
+                applyPaint(r, c);
+            }
+        }
+
+        function handleMouseUp() {
+            isDragging = false;
+        }
+
+        function applyPaint(r, c) {
+            grid[r][c] = paintMode;
+            updateGrid();
+        }
+
+        function removeShape(id) {
+            const shape = placedShapes.find(s => s.id === id);
+            if (shape) {
+                unplace(shape.pattern, shape.sr, shape.sc);
+                placedShapes = placedShapes.filter(s => s.id !== id);
+                updateGrid();
+            }
+        }
+
+        function updateGrid() {
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    const cell = document.querySelector(`[data-row="${r}"][data-col="${c}"]`);
+                    if (!cell) continue;
+                    cell.style.backgroundColor = '';
+                    cell.classList.remove('blocked');
+                    const val = grid[r][c];
+                    if (val === -1) {
+                        cell.classList.add('blocked');
+                    } else if (val > 0) {
+                        const shape = placedShapes.find(s => s.id === val);
+                        if (shape) {
+                            cell.style.backgroundColor = shape.color;
+                        }
+                    }
+                }
+            }
+        }
+
+        function canPlace(pattern, sr, sc) {
+            const h = pattern.length;
+            const w = pattern[0] ? pattern[0].length : 0;
+            for (let dr = 0; dr < h; dr++) {
+                for (let dc = 0; dc < w; dc++) {
+                    if (pattern[dr][dc] === 1) {
+                        const nr = sr + dr;
+                        const nc = sc + dc;
+                        if (nr >= 9 || nc >= 9 || grid[nr][nc] !== 0) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+        function place(piece, sr, sc) {
+            const { pattern, color } = piece;
+            const h = pattern.length;
+            const w = pattern[0] ? pattern[0].length : 0;
+            const id = ++shapeCounter;
+            for (let dr = 0; dr < h; dr++) {
+                for (let dc = 0; dc < w; dc++) {
+                    if (pattern[dr][dc] === 1) {
+                        grid[sr + dr][sc + dc] = id;
+                    }
+                }
+            }
+            placedShapes.push({ id, pattern, sr, sc, color });
+        }
+
+        function unplace(pattern, sr, sc) {
+            const h = pattern.length;
+            const w = pattern[0] ? pattern[0].length : 0;
+            for (let dr = 0; dr < h; dr++) {
+                for (let dc = 0; dc < w; dc++) {
+                    if (pattern[dr][dc] === 1) {
+                        grid[sr + dr][sc + dc] = 0;
+                    }
+                }
+            }
+        }
+
+        // 簡單 MRV：找第一個有剩餘計數的形狀
+        function selectNextShape(counts) {
+            for (let i = 0; i < counts.length; i++) {
+                if (counts[i] > 0) return i;
+            }
+            return -1;
+        }
+
+        function backtrack(counts, placed) {
+            if (tries > maxTries) return false;
+            const totalRemaining = counts.reduce((sum, c) => sum + c, 0);
+            if (totalRemaining === 0) return true;
+
+            const nextShapeIdx = selectNextShape(counts);
+            if (nextShapeIdx === -1) return false;
+
+            const pattern = shapes[nextShapeIdx].pattern;
+            const h = pattern.length;
+            const w = pattern[0] ? pattern[0].length : 0;
+
+            // 簡單循環位置，從左上開始
+            for (let sr = 0; sr <= 9 - h; sr++) {
+                for (let sc = 0; sc <= 9 - w; sc++) {
+                    if (canPlace(pattern, sr, sc)) {
+                        tries++;
+                        place(shapes[nextShapeIdx], sr, sc);
+                        placed.push({idx: nextShapeIdx, sr, sc});
+                        counts[nextShapeIdx]--;
+
+                        if (backtrack(counts, placed)) {
+                            return true;
+                        }
+
+                        // 恢復
+                        counts[nextShapeIdx]++;
+                        placed.pop();
+                        unplace(pattern, sr, sc);
+                    }
+                }
+            }
+            return false;
+        }
+
+        function solve() {
+            // 重置
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    if (grid[r][c] > 0) grid[r][c] = 0;
+                }
+            }
+            placedShapes = [];
+            shapeCounter = 0;
+            tries = 0;
+
+            // 收集計數
+            const counts = shapes.map((_, i) => parseInt(document.getElementById(`count_${i}`).value) || 0);
+            const totalPieces = counts.reduce((sum, c) => sum + c, 0);
+            if (totalPieces === 0) {
+                alert('請選擇至少一個道具！');
+                return;
+            }
+
+            const solutionDiv = document.getElementById('solution');
+            maxTries = parseInt(document.getElementById('maxTriesInput').value) || 5000000;
+            solutionDiv.innerHTML = `計算中...（道具總數: ${totalPieces}，上限: ${maxTries}）`;
+
+            const startTime = Date.now();
+            const placed = [];
+            const result = backtrack(counts, placed);
+            const timeTaken = Date.now() - startTime;
+
+            if (result) {
+                // 重建
+                for (let r = 0; r < 9; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (grid[r][c] > 0) grid[r][c] = 0;
+                    }
+                }
+                placedShapes = [];
+                shapeCounter = 0;
+                placed.forEach(({idx, sr, sc}) => {
+                    place(shapes[idx], sr, sc);
+                });
+                updateGrid();
+                solutionDiv.innerHTML = `找到解法！（耗時：${timeTaken}ms，嘗試次數：${tries}）。`;
+            } else {
+                alert(`無法找到解法，或者道具所佔格數可能大於背包格數 \n（嘗試次數：${tries}/${maxTries}，總耗時：${timeTaken}ms）。`);
+                solutionDiv.innerHTML = '無解或超時。';
+            }
+        }
+
+        function unlockAll() {
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    grid[r][c] = 0;
+                }
+            }
+            placedShapes = [];
+            shapeCounter = 0;
+            updateGrid();
+            document.getElementById('solution').innerHTML = '';
+        }
+
+        function restoreDefault() {
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    if (grid[r][c] > 0) grid[r][c] = 0;
+                }
+            }
+            grid = defaultGrid.map(row => [...row]);
+            placedShapes = [];
+            shapeCounter = 0;
+            updateGrid();
+            document.getElementById('solution').innerHTML = '';
+        }
+
+        function resetMaxTries() {
+            document.getElementById('maxTriesInput').value = '5000000';
+        }
+
+        function resetCounts() {
+            shapes.forEach((_, i) => {
+                document.getElementById(`count_${i}`).value = '0';
+            });
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initGrid();
+            const shapesDiv = document.getElementById('shapes');
+            const titleRow = document.createElement('div');
+            titleRow.className = 'title-row';
+            const h2 = document.createElement('h2');
+            h2.textContent = '選擇道具及數量：';
+            titleRow.appendChild(h2);
+            const resetBtn = document.createElement('button');
+            resetBtn.onclick = resetCounts;
+            resetBtn.textContent = '重置數量';
+            titleRow.appendChild(resetBtn);
+            shapesDiv.appendChild(titleRow);
+
+            const shapesRow = document.createElement('div');
+            shapesRow.className = 'shapes-row';
+
+            const leftColumn = document.createElement('div');
+            leftColumn.className = 'shapes-column';
+            const rightColumn = document.createElement('div');
+            rightColumn.className = 'shapes-column';
+
+            for (let i = 0; i < 6; i++) {
+                const shape = shapes[i];
+                const label = document.createElement('label');
+                const square = document.createElement('span');
+                square.className = 'color-square';
+                square.style.backgroundColor = shape.color;
+                label.appendChild(square);
+                label.innerHTML += `${shape.name} <input type="number" id="count_${i}" min="0" value="0"> 個`;
+                leftColumn.appendChild(label);
+            }
+
+            for (let i = 6; i < shapes.length; i++) {
+                const shape = shapes[i];
+                const label = document.createElement('label');
+                const square = document.createElement('span');
+                square.className = 'color-square';
+                square.style.backgroundColor = shape.color;
+                label.appendChild(square);
+                label.innerHTML += `${shape.name} <input type="number" id="count_${i}" min="0" value="0"> 個`;
+                rightColumn.appendChild(label);
+            }
+
+            shapesRow.appendChild(leftColumn);
+            shapesRow.appendChild(rightColumn);
+            shapesDiv.appendChild(shapesRow);
+        });
+    </script>
+</body>
+</html>
