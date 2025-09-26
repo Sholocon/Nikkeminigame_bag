@@ -94,7 +94,7 @@
             shape.color = `hsl(${i * 30}, 70%, 50%)`;
         });
 
-        let grid = Array.from({ length: 9 }, () => Array(9).fill(0)); // 0: 解鎖, -1: 堯鎖, >0: 形狀ID
+        let grid = Array.from({ length: 9 }, () => Array(9).fill(0)); // 0: 解鎖, -1: 封鎖, >0: 形狀ID
         let placedShapes = []; // [{id, pattern, sr, sc, color}]
         let shapeCounter = 0;
         let isDragging = false;
@@ -411,4 +411,5 @@
         });
     </script>
 </body>
+
 </html>
