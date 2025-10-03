@@ -49,20 +49,21 @@
 <body>
     <h1>Salvation Breakers背包解法計算器</h1>
     <p>點擊格子或按住左鍵拖動以改變格子狀態，紅色為未解鎖。<br>
-	選擇道具和數量後，按「計算解法」以計算放置方式。<br>
-	按「全部解鎖」解鎖所有格子，按「恢復預設」回到初始背包狀態，兩者均會清空所有已放置道具。<br><br>
-	最大嘗試次數預設為五百萬次，可自行更改嘗試次數。按「預設嘗試次數」回復至五百萬次。<br>
-	次數越多越有機會計算出解法，但亦會花費更多時間。<br><br>
-	道具種類越多，計算所需時間越多。<br>
-	建議不填入金幣（1格）的數量，如果有空位，解法生成後自行放入空位則可。
-	</p>
+    選擇道具和數量後，按「計算解法」以計算放置方式。<br>
+    按「全部解鎖」解鎖所有格子，按「恢復預設」回到初始背包狀態，兩者均會清空所有已放置道具。<br><br>
+    最大嘗試次數預設為五百萬次，可自行更改嘗試次數。按「預設嘗試次數」回復至五百萬次。<br>
+    次數越多越有機會計算出解法，但亦會花費更多時間。<br><br>
+    道具種類越多，計算所需時間越多。<br>
+    建議不填入金幣（1格）的數量，如果有空位，解法生成後自行放入空位則可。
+    </p>
     
     <div class="controls">
         <label>最大嘗試次數: <input type="number" id="maxTriesInput" value="5000000" min="1"> <button onclick="resetMaxTries()">預設嘗試次數</button></label>
     </div>
     
     <button onclick="unlockAll()">全部解鎖</button>
-    <button onclick="restoreDefault()">恢復預設</button>
+    <button onclick="restoreDefault()">吉兒背包</button>
+    <button onclick="restoreClaire()">克蕾兒背包</button>
     
     <div class="main-row">
         <div id="grid"></div>
@@ -84,6 +85,7 @@
             { name: '手榴彈/工具組', pattern: [[1, 1], [1, 1]] },
             { name: '手槍/槍托', pattern: [[1, 1], [1, 0]] },
             { name: '衝鋒槍/霰彈槍', pattern: [[1, 1, 1], [1, 0, 0]] },
+            { name: '榴彈發射器', pattern: [[0, 1, 1], [1, 1, 0]] },
             { name: '突擊步槍', pattern: [[1, 1, 1, 1], [0, 1, 0, 0]] },
             { name: '狙擊步槍', pattern: [[1, 0], [1, 0], [1, 0], [1, 1]] },
             { name: '雷射炮', pattern: [[0, 0, 0, 1], [1, 1, 1, 1]] },
@@ -110,6 +112,19 @@
             [-1,-1,-1,0,0,0,-1,-1,-1],
             [-1,-1,-1,0,0,0,-1,-1,-1],
             [-1,-1,-1,0,0,0,-1,-1,-1],
+            [-1,-1,-1,-1,-1,-1,-1,-1,-1],
+            [-1,-1,-1,-1,-1,-1,-1,-1,-1]
+        ];
+
+        // 克蕾兒背包形狀
+        const claireGrid = [
+            [-1,-1,-1,-1,-1,-1,-1,-1,-1],
+            [-1,-1,-1,-1,-1,-1,-1,-1,-1],
+            [-1,-1,-1,-1,-1,-1,-1,-1,-1],
+            [-1,-1,0,0,0,0,0,-1,-1],
+            [-1,-1,0,0,0,0,0,-1,-1],
+            [-1,-1,0,0,0,0,0,-1,-1],
+            [-1,-1,-1,-1,-1,-1,-1,-1,-1],
             [-1,-1,-1,-1,-1,-1,-1,-1,-1],
             [-1,-1,-1,-1,-1,-1,-1,-1,-1]
         ];
@@ -350,6 +365,20 @@
             document.getElementById('solution').innerHTML = '';
         }
 
+        // 新增克蕾兒背包恢復功能
+        function restoreClaire() {
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    if (grid[r][c] > 0) grid[r][c] = 0;
+                }
+            }
+            grid = claireGrid.map(row => [...row]);
+            placedShapes = [];
+            shapeCounter = 0;
+            updateGrid();
+            document.getElementById('solution').innerHTML = '';
+        }
+
         function resetMaxTries() {
             document.getElementById('maxTriesInput').value = '5000000';
         }
@@ -411,5 +440,4 @@
         });
     </script>
 </body>
-
 </html>
